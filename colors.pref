@@ -1,0 +1,27 @@
+# use sharp to comment out a line
+
+### supported color formats: ###
+# names in color_names.pdf: e.g. blue, lightblue, etc.
+# hexcolor: e.g. 00FFFF, ffff00, etc.
+
+[outer]
+fidblue
+cyan
+coral
+ffff00
+grey
+lightgreen
+yellow
+black
+# salmon
+# seagreen
+# pink
+# slategrey
+# steelblue
+# skyblue
+# blue
+# slategray
+
+[inner]
+blue
+lightblue

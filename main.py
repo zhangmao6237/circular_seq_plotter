@@ -7,7 +7,11 @@ from Bio import SeqIO
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 import random
+import os
 import read_table
+
+codec = {'nt': 'gbk'}.get(os.name, 'utf-8')
+abs_dir = os.path.abspath(os.path.join(__file__, os.path.pardir))
 
 
 def get_info(path):
@@ -34,40 +38,41 @@ def get_info(path):
     return info_d, categories
 
 
-def draw_by_bio(info, cates, seqlen, filename):
+def read_colors():
+    with open(os.path.join(abs_dir, 'colors.pref')) as fp:
+        lines = [l.strip() for l in fp]
+    lines = [l for l in lines if not l.startswith('#') and l != '']
+    inner_start = lines.index('[inner]')
+    outer_start = lines.index('[outer]')
+    if inner_start > outer_start:
+        inner = lines[inner_start + 1:]
+        outer = lines[outer_start + 1:inner_start]
+    else:
+        outer = lines[outer_start + 1:]
+        inner = lines[inner_start + 1:outer_start]
+
+    def _conv(color):
+        if len(color) == 6:
+            try:
+                color.decode('hex')
+                return '#' + color
+            except:
+                pass
+        return color
+
+    inner, outer = [map(_conv, c) for c in (inner, outer)]
+    return inner, outer
+
+
+def draw_by_bio(info, cates, long_intervals, seqlen, filename):
     import diagram as _dia
     reload(_dia)
     diagram = _dia.Diagram('Test Diagram')
-    color_space = [  # 'salmon',
-        # 'seagreen',
-        # 'pink',
-        'fidblue',
-        # 'slategrey',
-        'cyan',
-        # 'steelblue',
-        'coral',
-        # 'skyblue',
-        'grey',
-        'lightgreen',
-        # 'blue',
-        # 'slategray',
-        'yellow',
-        'black',
-    ]
 
-    # color_space = ['salmon',
-    #                'seagreen',
-    #                'slategrey',
-    #                'cyan',
-    #                'grey',
-    #                'green',
-    #                'blue',
-    #                'slategray']
-    # color_space = ['dark'+c for c in color_space]
-
-
-    assert len(cates) <= len(color_space)
-    color_map = zip(cates, color_space)
+    inner_colors, outer_colors = read_colors()
+    if len(cates) > len(outer_colors):
+        raise Exception('outer_colors num: %s, cannot satisfy category num: %s' % (len(outer_colors), len(cates)))
+    color_map = zip(cates, outer_colors)
     color_trans = ColorTranslator()
     color_name_pairs = [(color_trans.translate(t[1]), t[0]) for t in color_map]
     color_map = dict(color_map)
@@ -98,7 +103,7 @@ def draw_by_bio(info, cates, seqlen, filename):
 
         def _add_feat(cate_i):
             color = color_map[concur_cates[cate_i]]
-            start = loc - (cate_i - concur_num / 2) * width
+            start = loc  # - (cate_i - concur_num / 2) * width
             end = start + width
             feat = SeqFeature(FeatureLocation(start, end, strand=1))
             titled_angle = 0
@@ -108,9 +113,17 @@ def draw_by_bio(info, cates, seqlen, filename):
 
         [_add_feat(cate_i) for cate_i in xrange(concur_num)]
 
+    def _add_intervals(feature_set, i):
+        start, end = long_intervals[i]
+        feat = SeqFeature(FeatureLocation(start, end, strand=-1))
+        color = inner_colors[i % len(inner_colors)]
+        feature_set.add_feature(feat, color=color)
+
     def _add(track):
         feature_set = track.new_set()
         [_add_feats(feature_set, i, 1) for i in xrange(len(info))]
+        if long_intervals is not None:
+            [_add_intervals(feature_set, i) for i in xrange(len(long_intervals))]
 
     def _track(track_level):
         track = diagram.new_track(track_level, greytrack=False)
@@ -122,6 +135,44 @@ def draw_by_bio(info, cates, seqlen, filename):
                  start=0, end=seqlen, circle_core=.7, color_name_pairs=color_name_pairs)
     diagram.write("%s.svg" % filename, "svg")
     print u'输出为%s.svg' % filename
+
+
+def single_proc(args):
+    args = args.split('  ')
+    name, seqlen = args[:2]
+    seqlen = int(seqlen)
+
+    long_intervals = None
+    if len(args) > 2:
+        long_intervals = args[2].split(',')
+        long_intervals = [map(int, tup.split('-')) for tup in long_intervals]
+    info, cates = get_info(name)
+    dst_name = os.path.splitext(name)[0].decode(codec)
+    draw_by_bio(info, cates, long_intervals, seqlen, dst_name)
+
+
+def main():
+    while True:
+        try:
+            opt = raw_input('\n\n1. single file processing\n2. batch script processing\noption (1/2): ')
+            if opt == '1':
+                args = raw_input(u'输入文件名、序列总长、长区间(start1-end1,start2-end2)，两个空格分开：\n'.encode(codec))
+                single_proc(args)
+            elif opt == '2':
+                path = raw_input(u'输入批处理脚本的路径，批处理脚本的每行与单文件处理格式一致：\n'.encode(codec))
+                batch_proc(path)
+        except Exception as e:
+            if isinstance(e, KeyboardInterrupt):
+                raise e
+            else:
+                print e
+
+
+def batch_proc(path):
+    with open(path) as fp:
+        lines = fp.read().splitlines()
+    lines = [l.decode('utf-8').encode(codec) for l in lines if l != '']
+    [single_proc(l) for l in lines]
 
 
 def stat():
@@ -164,18 +215,6 @@ def stat():
     import ipdb
     ipdb.set_trace()
 
+
 if __name__ == '__main__':
-    import os
-    while True:
-        try:
-            codec = {'nt': 'gbk'}.get(os.name, 'utf-8')
-            name, seqlen = raw_input(u'输入文件名和序列总长，两个空格分开：\n'.encode(codec)).split('  ')
-            seqlen = int(seqlen)
-            info, cates = get_info(name)
-            dst_name = os.path.splitext(name)[0].decode(codec)
-            draw_by_bio(info, cates, seqlen, dst_name)
-        except Exception as e:
-            if isinstance(e, KeyboardInterrupt):
-                raise e
-            else:
-                print e
+    main()
