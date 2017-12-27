@@ -134,7 +134,8 @@ def draw_by_bio(info, cates, long_intervals, seqlen, filename):
     diagram.draw(format='circular', circular=True, pagesize=(8 * cm, 8 * cm), fragments=1, orientation='portrait',
                  start=0, end=seqlen, circle_core=.7, color_name_pairs=color_name_pairs)
     diagram.write("%s.svg" % filename, "svg")
-    print u'输出为%s.svg' % filename
+    text = u'输出为%s.svg' % filename
+    print text.encode(codec)
 
 
 def single_proc(args):
@@ -165,7 +166,8 @@ def main():
             if isinstance(e, KeyboardInterrupt):
                 raise e
             else:
-                print e
+                import traceback
+                print traceback.format_exc()
 
 
 def batch_proc(path):
