@@ -8,6 +8,14 @@ from reportlab.graphics.charts.legends import Legend
 
 
 class CircularDrawer(_Cir):
+    def __init__(self, parent=None, pagesize='A3', orientation='landscape', x=0.05, y=0.05, xl=None, xr=None, yt=None,
+                 yb=None, start=None, end=None, tracklines=0, track_size=0.75, circular=1, outer_circle_core=0.0,
+                 inner_circle_core=0.0,
+                 cross_track_links=None):
+        super(CircularDrawer, self).__init__(parent, pagesize, orientation, x, y, xl, xr, yt, yb, start, end,
+                                             tracklines, track_size, circular, outer_circle_core, cross_track_links)
+        self.inner_circle_core = inner_circle_core
+
     def draw_legend(self, name_pairs):
         legend = Legend()
         legend.colorNamePairs = name_pairs
@@ -67,6 +75,42 @@ class CircularDrawer(_Cir):
         tilt_sin, tilt_cos = sin(mid_angle + tilted_angle), cos(mid_angle + tilted_angle)
         tx0, ty0 = (txc - inner_radius * tilt_sin, tyc - inner_radius * tilt_cos)
         return tx0, ty0, startangle + tilted_angle, endangle + tilted_angle
+
+    def set_track_heights(self):
+        """Initialize track heights.
+
+        Since tracks may not be of identical heights, the bottom and top
+        radius for each track is stored in a dictionary - self.track_radii,
+        keyed by track number
+        """
+        bot_track = min(min(self.drawn_tracks), 1)
+        top_track = max(self.drawn_tracks)  # The 'highest' track to draw
+
+        trackunit_sum = 0  # Total number of 'units' taken up by all tracks
+        trackunits = {}  # Start and & units for each track keyed by track number
+        heightholder = 0  # placeholder variable
+        for track in range(bot_track, top_track + 1):  # track numbers to 'draw'
+            try:
+                trackheight = self._parent[track].height  # Get track height
+            except Exception:  # TODO: ValueError? IndexError?
+                trackheight = 1
+            trackunit_sum += trackheight  # increment total track unit height
+            trackunits[track] = (heightholder, heightholder + trackheight)
+            heightholder += trackheight  # move to next height
+
+        max_radius = 0.5 * min(self.pagewidth, self.pageheight)
+        trackunit_height = max_radius * (1 - self.circle_core) / trackunit_sum
+        track_core = max_radius * self.circle_core
+
+        # Calculate top and bottom radii for each track
+        self.track_radii = {}  # The inner, outer and center radii for each track
+        track_crop = trackunit_height * (1 - self.track_size) / 2.  # 'step back' in pixels
+        for track in trackunits:
+            top = trackunits[track][1] * trackunit_height - track_crop + track_core
+            btm = trackunits[track][0] * trackunit_height + track_crop + track_core
+            ctr = btm + (top - btm) / 2.
+            btm += (ctr - btm) * (self.circle_core / self.inner_circle_core)
+            self.track_radii[track] = (btm, ctr, top)
 
     def _draw_arc(self, inner_radius, outer_radius, startangle, endangle,
                   color, border=None, colour=None, **kwargs):
@@ -134,7 +178,7 @@ class Diagram(GenomeDiagram.Diagram):
              x=None, y=None, xl=None, xr=None, yt=None, yb=None,
              start=None, end=None, tracklines=None, fragments=None,
              fragment_size=None, track_size=None, circular=None,
-             circle_core=None, cross_track_links=None, color_name_pairs=None):
+             circle_core=None, inner_circle_core=None, cross_track_links=None, color_name_pairs=None):
         """Draw the diagram, with passed parameters overriding existing attributes.
 
         gdd.draw(format='circular')
@@ -166,6 +210,7 @@ class Diagram(GenomeDiagram.Diagram):
                                     track_size or self.track_size,
                                     circular or self.circular,
                                     circle_core or self.circle_core,
+                                    inner_circle_core or self.circle_core,
                                     cross_track_links or self.cross_track_links)
         drawer.draw()  # Tell the drawer to complete the drawing
         if color_name_pairs is not None:

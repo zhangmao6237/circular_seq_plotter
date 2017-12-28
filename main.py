@@ -132,7 +132,7 @@ def draw_by_bio(info, cates, long_intervals, seqlen, filename):
     _track(1)
 
     diagram.draw(format='circular', circular=True, pagesize=(8 * cm, 8 * cm), fragments=1, orientation='portrait',
-                 start=0, end=seqlen, circle_core=.7, color_name_pairs=color_name_pairs)
+                 start=0, end=seqlen, circle_core=.7, inner_circle_core=1, color_name_pairs=color_name_pairs)
     diagram.write("%s.svg" % filename, "svg")
     text = u'输出为%s.svg' % filename
     print text.encode(codec)
